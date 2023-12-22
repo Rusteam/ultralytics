@@ -35,6 +35,7 @@ try:
 
     PREFIX = colorstr('MLflow: ')
     SANITIZE = lambda x: {k.replace('(', '').replace(')', ''): float(v) for k, v in x.items()}
+    is_existing_run = False
 
 except (ImportError, AssertionError):
     mlflow = None
@@ -59,7 +60,7 @@ def on_pretrain_routine_end(trainer):
         MLFLOW_EXPERIMENT_NAME: The name of the MLflow experiment. If not set, defaults to trainer.args.project.
         MLFLOW_RUN: The name of the MLflow run. If not set, defaults to trainer.args.name.
     """
-    global mlflow
+    global mlflow, is_existing_run
 
     uri = os.environ.get('MLFLOW_TRACKING_URI') or str(RUNS_DIR / 'mlflow')
     LOGGER.debug(f'{PREFIX} tracking uri: {uri}')
@@ -72,12 +73,17 @@ def on_pretrain_routine_end(trainer):
 
     mlflow.autolog()
     try:
-        active_run = mlflow.active_run() or mlflow.start_run(run_name=run_name)
+        if mlflow.active_run():
+            active_run = mlflow.active_run()
+            is_existing_run = True
+        else:
+            active_run = mlflow.start_run(run_name=run_name)
         LOGGER.info(f'{PREFIX}logging run_id({active_run.info.run_id}) to {uri}')
         if Path(uri).is_dir():
             LOGGER.info(f"{PREFIX}view at http://127.0.0.1:5000 with 'mlflow server --backend-store-uri {uri}'")
         LOGGER.info(f"{PREFIX}disable with 'yolo settings mlflow=False'")
-        mlflow.log_params(dict(trainer.args))
+        if not is_existing_run:
+            mlflow.log_params(dict(trainer.args))
     except Exception as e:
         LOGGER.warning(f'{PREFIX}WARNING ⚠️ Failed to initialize: {e}\n'
                        f'{PREFIX}WARNING ⚠️ Not tracking this run')
@@ -105,7 +111,8 @@ def on_train_end(trainer):
             if f.suffix in {'.png', '.jpg', '.csv', '.pt', '.yaml'}:
                 mlflow.log_artifact(str(f))
 
-        mlflow.end_run()
+        if not is_existing_run:
+            mlflow.end_run()
         LOGGER.info(f'{PREFIX}results logged to {mlflow.get_tracking_uri()}\n'
                     f"{PREFIX}disable with 'yolo settings mlflow=False'")
 
