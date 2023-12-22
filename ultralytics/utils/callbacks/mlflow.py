@@ -66,18 +66,18 @@ def on_pretrain_routine_end(trainer):
     LOGGER.debug(f'{PREFIX} tracking uri: {uri}')
     mlflow.set_tracking_uri(uri)
 
-    # Set experiment and run names
-    experiment_name = os.environ.get('MLFLOW_EXPERIMENT_NAME') or trainer.args.project or '/Shared/YOLOv8'
-    run_name = os.environ.get('MLFLOW_RUN') or trainer.args.name
-    mlflow.set_experiment(experiment_name)
+    is_existing_run = mlflow.active_run() is not None
 
-    mlflow.autolog()
+    if not is_existing_run:
+        # Set experiment and run names
+        experiment_name = os.environ.get('MLFLOW_EXPERIMENT_NAME') or trainer.args.project or '/Shared/YOLOv8'
+        run_name = os.environ.get('MLFLOW_RUN') or trainer.args.name
+        mlflow.set_experiment(experiment_name)
+
+        mlflow.autolog()
+
     try:
-        if mlflow.active_run():
-            active_run = mlflow.active_run()
-            is_existing_run = True
-        else:
-            active_run = mlflow.start_run(run_name=run_name)
+        active_run = mlflow.active_run() or mlflow.start_run(run_name=run_name)
         LOGGER.info(f'{PREFIX}logging run_id({active_run.info.run_id}) to {uri}')
         if Path(uri).is_dir():
             LOGGER.info(f"{PREFIX}view at http://127.0.0.1:5000 with 'mlflow server --backend-store-uri {uri}'")
